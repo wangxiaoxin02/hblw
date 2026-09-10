@@ -33,9 +33,9 @@
     .checkbox-label input { margin-right: 8px; }
     .btn-primary { width: 100%; background: #07c160; color: #fff; border: none; padding: 12px; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
     .btn-secondary { background: #108ee9; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; }
-    .btn-danger { background: #f5222d; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+    .btn-danger { background: #f5222d; color: #fff; border: none; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; }
     .record-card { background: #fafafa; border: 1px solid #eee; padding: 10px; border-radius: 6px; margin-bottom: 8px; font-size: 13px; position: relative; }
-    .record-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+    .record-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
     .time { font-size: 11px; color: #999; margin-top: 4px; }
     .admin-panel { display: none; background: #e6f7ff; border: 1px solid #91d5ff; }
     .admin-active .admin-panel { display: block; }
@@ -94,12 +94,12 @@
 
     <button id="submit-btn" class="btn-primary" onclick="submitOrder()">确认提交并扣减库存</button>
 
-    <!-- 3. 统计记录列表（普通用户仅能看到自己的，管理员能看到全部并进行删除） -->
+    <!-- 3. 提交记录列表 -->
     <div class="section" style="margin-top: 15px;">
       <div class="section-title">
-        <span id="record-title">我的提交记录</span>
+        <span id="record-title">提交记录统计</span>
       </div>
-      <div id="record-list">请输入手机号查看历史提交记录</div>
+      <div id="record-list">请输入手机号自动查询您的提交记录</div>
     </div>
   </div>
 
@@ -116,15 +116,16 @@
     let supabaseClient = null;
     let currentRecordId = null; 
 
-    function toggleAdmin() {
+    // 切换管理员模式
+    async function toggleAdmin() {
       if (!isAdmin) {
         const pwd = prompt("请输入管理员密码：");
         if (pwd === ADMIN_PASSWORD) {
           isAdmin = true;
           document.getElementById('body').classList.add('admin-active');
-          document.getElementById('admin-btn').innerText = "当前模式：管理员";
+          document.getElementById('admin-btn').innerText = "当前模式：管理员 (点击退出)";
           renderAdminGoods();
-          fetchRecords(); // 切换管理员时加载全量数据
+          await fetchAdminAllRecords(); // 进入管理员模式后才拉取全量数据
         } else if (pwd !== null) {
           alert("密码错误！");
         }
@@ -151,9 +152,7 @@
         return;
       }
       await fetchGoods();
-      if (isAdmin) {
-        await fetchRecords();
-      }
+      // 页面首次加载时不获取任何全量 records 数据
     }
 
     async function fetchGoods() {
@@ -173,38 +172,28 @@
       }
     }
 
-    async function fetchRecords() {
+    // 管理员拉取全量记录
+    async function fetchAdminAllRecords() {
       try {
-        let query = supabaseClient.from('records').select('*').order('created_at', { ascending: false });
-        
-        // 普通模式下，如果不选手机号则不展示全量记录；管理员展示全量记录
-        if (!isAdmin) {
-          const phone = document.getElementById('phone').value.trim();
-          if (!phone) {
-            records = [];
-            renderRecords();
-            return;
-          }
-          query = query.eq('phone', phone);
-        }
-
-        const { data, error } = await query;
+        const { data, error } = await supabaseClient.from('records').select('*').order('created_at', { ascending: false });
         if (error) throw error;
-        if (data) {
-          records = data;
-          renderRecords();
-        }
+        records = data || [];
+        renderRecords();
       } catch (err) {
-        document.getElementById('record-list').innerHTML = `<span style='color:red;'>读取记录失败: ${err.message}</span>`;
+        document.getElementById('record-list').innerHTML = `<span style='color:red;'>读取全量记录失败: ${err.message}</span>`;
       }
     }
 
-    // 实时查个人手机号对应的历史提交记录
+    // 实时查询个人手机号对应的历史提交记录（普通模式）
     let searchTimer = null;
     function checkPhoneMatch() {
       clearTimeout(searchTimer);
       searchTimer = setTimeout(async () => {
         const phone = document.getElementById('phone').value.trim();
+        
+        // 如果是在管理员模式下，不触发个人匹配
+        if (isAdmin) return;
+
         if (phone.length >= 11) {
           const { data } = await supabaseClient
             .from('records')
@@ -213,7 +202,7 @@
             .order('created_at', { ascending: false });
 
           if (data && data.length > 0) {
-            records = data;
+            records = data; // 仅存入该手机号的数据
             const lastRecord = data[0];
             currentRecordId = lastRecord.id;
             
@@ -252,12 +241,13 @@
       currentRecordId = null;
       document.getElementById('edit-notice').style.display = 'none';
       document.getElementById('submit-btn').innerText = '确认提交并扣减库存';
-      if (!isAdmin) {
-        records = [];
+      
+      if (isAdmin) {
+        fetchAdminAllRecords();
       } else {
-        fetchRecords();
+        records = [];
+        renderRecords();
       }
-      renderRecords();
     }
 
     function renderGoods() {
@@ -292,7 +282,7 @@
           <div class="admin-goods-row">
             <input type="text" class="input" value="${item.name}" onchange="updateGoodsName(${item.id}, this.value)">
             <input type="number" class="input" style="width: 100px;" value="${item.stock}" onchange="updateGoodsStock(${item.id}, this.value)">
-            <button class="btn-danger" onclick="deleteGoods(${item.id})">删除</button>
+            <button class="btn-danger" onclick="deleteGoods(${item.id})">删除商品</button>
           </div>
         `;
       });
@@ -303,13 +293,13 @@
       const titleObj = document.getElementById('record-title');
 
       if (isAdmin) {
-        titleObj.innerText = `全部提交记录统计（共 ${records.length} 条）`;
+        titleObj.innerText = `全部提交记录（管理员界面 - 共 ${records.length} 条）`;
       } else {
         titleObj.innerText = `我的提交记录`;
       }
 
       if (records.length === 0) {
-        container.innerHTML = isAdmin ? "暂无任何提交记录" : "输入手机号后自动载入您的历史记录";
+        container.innerHTML = isAdmin ? "暂无任何提交记录" : "请输入手机号自动查询您的历史记录";
         return;
       }
 
@@ -320,8 +310,8 @@
         container.innerHTML += `
           <div class="record-card" style="${isEditing ? 'border: 1px solid #1890ff; background: #e6f7ff;' : ''}">
             <div class="record-header">
-              <div><b>提交人：</b>${item.name} (${item.phone}) ${isEditing ? '<span style="color:#1890ff;font-weight:bold;">(正在编辑)</span>' : ''}</div>
-              ${isAdmin ? `<button class="btn-danger" style="padding: 2px 6px; font-size: 11px;" onclick="deleteRecord(${item.id})">删除记录</button>` : ''}
+              <div><b>提交人：</b>${item.name} (${item.phone}) ${isEditing ? '<span style="color:#1890ff;font-weight:bold;">(当前编辑中)</span>' : ''}</div>
+              ${isAdmin ? `<button class="btn-danger" onclick="deleteRecord(${item.id})">删除记录</button>` : ''}
             </div>
             <div><b>选择物品：</b>${item.goods_summary}</div>
             <div><b>是否用券：</b>${item.use_coupon ? '是' : '否'}</div>
@@ -398,7 +388,7 @@
       alert('记录已删除，库存已还原！');
       
       await fetchGoods();
-      await fetchRecords();
+      await fetchAdminAllRecords();
     }
 
     async function submitOrder() {
@@ -463,7 +453,7 @@
       goodsList.forEach(g => g.selectCount = 0);
       resetToNewMode();
 
-      initData();
+      await fetchGoods();
     }
 
     function exportCSV() {
