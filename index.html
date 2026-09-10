@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>内部物品领用管理系统 (云端同步版)</title>
   <!-- 引入 Supabase 云数据库 SDK -->
-  <script src="https://unpkg.zhimg.com/@supabase/supabase-js@2"></script>
+  <<script src="https://cdn.bootcdn.net/ajax/libs/supabase-js/2.39.8/supabase.min.js"></script>>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f8; margin: 0; padding: 15px; color: #333; }
@@ -91,202 +91,234 @@
   </div>
 
   <script>
-    // ⚠️ 请在这里替换为您在 Supabase 后台获取的两个值
-    const SUPABASE_URL = "https://kkanrbdewrozxpppphnr.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_OEFaldrTtKB0Z3nJSKNhSw_FvKmpjS0";
+  const SUPABASE_URL = "https://kkanrbdewrozxpppphnr.supabase.co";
+  // ⚠️ 替换为 Supabase 后台 Publishable Key 或 Legacy anon Key
+  const SUPABASE_KEY = "你的_API_KEY";
 
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-    const ADMIN_PASSWORD = "123456";
-    let isAdmin = false;
-    let goodsList = [];
-    let records = [];
-
-    async function initData() {
-      await fetchGoods();
-      await fetchRecords();
+  // 注意：这里变量名改成了 supabaseClient，避免与 CDN 全局对象冲突
+  let supabaseClient = null;
+  try {
+    if (window.supabase) {
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     }
+  } catch (e) {
+    console.error("Supabase 初始化失败:", e);
+  }
 
-    async function fetchGoods() {
-      const { data, error } = await supabase.from('goods').select('*').order('id', { ascending: true });
-      if (!error && data) {
+  const ADMIN_PASSWORD = "123456";
+  let isAdmin = false;
+  let goodsList = [];
+  let records = [];
+
+  function toggleAdmin() {
+    if (!isAdmin) {
+      const pwd = prompt("请输入管理员密码：");
+      if (pwd === ADMIN_PASSWORD) {
+        isAdmin = true;
+        document.getElementById('body').classList.add('admin-active');
+        document.getElementById('admin-btn').innerText = "当前模式：管理员";
+        renderAdminGoods();
+      } else if (pwd !== null) {
+        alert("密码错误！");
+      }
+    } else {
+      isAdmin = false;
+      document.getElementById('body').classList.remove('admin-active');
+      document.getElementById('admin-btn').innerText = "管理员入口";
+    }
+  }
+
+  async function initData() {
+    if (!supabaseClient) {
+      document.getElementById('goods-list').innerHTML = "<span style='color:red;'>数据库组件未加载，请刷新页面</span>";
+      document.getElementById('record-list').innerHTML = "<span style='color:red;'>数据库组件未加载</span>";
+      return;
+    }
+    await fetchGoods();
+    await fetchRecords();
+  }
+
+  async function fetchGoods() {
+    try {
+      const { data, error } = await supabaseClient.from('goods').select('*').order('id', { ascending: true });
+      if (error) throw error;
+      if (data) {
         goodsList = data.map(item => ({ ...item, selectCount: 0 }));
         renderGoods();
         if (isAdmin) renderAdminGoods();
       }
+    } catch (err) {
+      document.getElementById('goods-list').innerHTML = `<span style='color:red;'>读取商品失败: ${err.message}</span>`;
     }
+  }
 
-    async function fetchRecords() {
-      const { data, error } = await supabase.from('records').select('*').order('created_at', { ascending: false });
-      if (!error && data) {
+  async function fetchRecords() {
+    try {
+      const { data, error } = await supabaseClient.from('records').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      if (data) {
         records = data;
         renderRecords();
       }
+    } catch (err) {
+      document.getElementById('record-list').innerHTML = `<span style='color:red;'>读取记录失败: ${err.message}</span>`;
     }
+  }
 
-    function toggleAdmin() {
-      if (!isAdmin) {
-        const pwd = prompt("请输入管理员密码：");
-        if (pwd === ADMIN_PASSWORD) {
-          isAdmin = true;
-          document.getElementById('body').classList.add('admin-active');
-          document.getElementById('admin-btn').innerText = "当前模式：管理员";
-          renderAdminGoods();
-        } else if (pwd !== null) {
-          alert("密码错误！");
-        }
-      } else {
-        isAdmin = false;
-        document.getElementById('body').classList.remove('admin-active');
-        document.getElementById('admin-btn').innerText = "管理员入口";
+  function renderGoods() {
+    const container = document.getElementById('goods-list');
+    if (goodsList.length === 0) {
+      container.innerHTML = "暂无商品";
+      return;
+    }
+    container.innerHTML = '';
+    goodsList.forEach(item => {
+      container.innerHTML += `
+        <div class="goods-item">
+          <div>
+            <div class="goods-name">${item.name}</div>
+            <span class="goods-stock">剩余库存: ${item.stock}</span>
+          </div>
+          <div class="stepper">
+            <button class="btn-step" onclick="changeCount(${item.id}, -1)">-</button>
+            <span class="count">${item.selectCount || 0}</span>
+            <button class="btn-step" onclick="changeCount(${item.id}, 1)">+</button>
+          </div>
+        </div>
+      `;
+    });
+  }
+
+  function renderAdminGoods() {
+    const container = document.getElementById('admin-goods-manage');
+    container.innerHTML = '';
+    goodsList.forEach(item => {
+      container.innerHTML += `
+        <div class="admin-goods-row">
+          <input type="text" class="input" value="${item.name}" onchange="updateGoodsName(${item.id}, this.value)">
+          <input type="number" class="input" style="width: 100px;" value="${item.stock}" onchange="updateGoodsStock(${item.id}, this.value)">
+          <button class="btn-danger" onclick="deleteGoods(${item.id})">删除</button>
+        </div>
+      `;
+    });
+  }
+
+  function renderRecords() {
+    const container = document.getElementById('record-list');
+    document.getElementById('record-title').innerText = `提交记录统计（共 ${records.length} 条）`;
+    if (records.length === 0) {
+      container.innerHTML = "暂无提交记录";
+      return;
+    }
+    container.innerHTML = '';
+    records.forEach(item => {
+      const timeStr = new Date(item.created_at).toLocaleString();
+      container.innerHTML += `
+        <div class="record-card">
+          <div><b>提交人：</b>${item.name} (${item.phone})</div>
+          <div><b>选择物品：</b>${item.goods_summary}</div>
+          <div><b>是否用券：</b>${item.use_coupon ? '是' : '否'}</div>
+          ${item.remark ? `<div><b>备注：</b>${item.remark}</div>` : ''}
+          <div class="time">${timeStr}</div>
+        </div>
+      `;
+    });
+  }
+
+  function changeCount(id, delta) {
+    const item = goodsList.find(g => g.id === id);
+    if (item) {
+      item.selectCount = (item.selectCount || 0) + delta;
+      if (item.selectCount < 0) item.selectCount = 0;
+      if (item.selectCount > item.stock) {
+        item.selectCount = item.stock;
+        alert('已超出剩余库存');
       }
+      renderGoods();
     }
+  }
 
-    function renderGoods() {
-      const container = document.getElementById('goods-list');
-      container.innerHTML = '';
-      goodsList.forEach(item => {
-        container.innerHTML += `
-          <div class="goods-item">
-            <div>
-              <div class="goods-name">${item.name}</div>
-              <span class="goods-stock">剩余库存: ${item.stock}</span>
-            </div>
-            <div class="stepper">
-              <button class="btn-step" onclick="changeCount(${item.id}, -1)">-</button>
-              <span class="count">${item.selectCount || 0}</span>
-              <button class="btn-step" onclick="changeCount(${item.id}, 1)">+</button>
-            </div>
-          </div>
-        `;
-      });
-    }
+  async function updateGoodsName(id, name) {
+    await supabaseClient.from('goods').update({ name }).eq('id', id);
+    fetchGoods();
+  }
 
-    function renderAdminGoods() {
-      const container = document.getElementById('admin-goods-manage');
-      container.innerHTML = '';
-      goodsList.forEach(item => {
-        container.innerHTML += `
-          <div class="admin-goods-row">
-            <input type="text" class="input" value="${item.name}" onchange="updateGoodsName(${item.id}, this.value)">
-            <input type="number" class="input" style="width: 100px;" value="${item.stock}" onchange="updateGoodsStock(${item.id}, this.value)">
-            <button class="btn-danger" onclick="deleteGoods(${item.id})">删除</button>
-          </div>
-        `;
-      });
-    }
+  async function updateGoodsStock(id, stock) {
+    await supabaseClient.from('goods').update({ stock: parseInt(stock) || 0 }).eq('id', id);
+    fetchGoods();
+  }
 
-    function renderRecords() {
-      const container = document.getElementById('record-list');
-      document.getElementById('record-title').innerText = `提交记录统计（共 ${records.length} 条）`;
-      container.innerHTML = '';
-      records.forEach(item => {
-        const timeStr = new Date(item.created_at).toLocaleString();
-        container.innerHTML += `
-          <div class="record-card">
-            <div><b>提交人：</b>${item.name} (${item.phone})</div>
-            <div><b>选择物品：</b>${item.goods_summary}</div>
-            <div><b>是否用券：</b>${item.use_coupon ? '是' : '否'}</div>
-            ${item.remark ? `<div><b>备注：</b>${item.remark}</div>` : ''}
-            <div class="time">${timeStr}</div>
-          </div>
-        `;
-      });
-    }
+  async function addGoods() {
+    const name = document.getElementById('new-goods-name').value.trim();
+    const stock = parseInt(document.getElementById('new-goods-stock').value) || 0;
+    if (!name) return alert('请填写商品名称');
+    
+    await supabaseClient.from('goods').insert([{ name, stock }]);
+    document.getElementById('new-goods-name').value = '';
+    document.getElementById('new-goods-stock').value = '';
+    fetchGoods();
+  }
 
-    function changeCount(id, delta) {
-      const item = goodsList.find(g => g.id === id);
-      if (item) {
-        item.selectCount = (item.selectCount || 0) + delta;
-        if (item.selectCount < 0) item.selectCount = 0;
-        if (item.selectCount > item.stock) {
-          item.selectCount = item.stock;
-          alert('已超出剩余库存');
-        }
-        renderGoods();
-      }
-    }
-
-    async function updateGoodsName(id, name) {
-      await supabase.from('goods').update({ name }).eq('id', id);
+  async function deleteGoods(id) {
+    if (confirm('确定要删除该商品吗？')) {
+      await supabaseClient.from('goods').delete().eq('id', id);
       fetchGoods();
     }
+  }
 
-    async function updateGoodsStock(id, stock) {
-      await supabase.from('goods').update({ stock: parseInt(stock) || 0 }).eq('id', id);
-      fetchGoods();
+  async function submitOrder() {
+    const name = document.getElementById('username').value.trim();
+    const phone = document.getElementById('phone').value.trim();
+    const remark = document.getElementById('remark').value.trim();
+    const useCoupon = document.getElementById('useCoupon').checked;
+
+    if (!name || !phone) return alert('请填写姓名和联系方式');
+
+    const selected = goodsList.filter(g => g.selectCount > 0);
+    if (selected.length === 0) return alert('请至少选择一件物品');
+
+    let goodsSummaryArr = [];
+    for (let item of selected) {
+      goodsSummaryArr.push(`${item.name} x${item.selectCount}`);
+      const newStock = item.stock - item.selectCount;
+      await supabaseClient.from('goods').update({ stock: newStock }).eq('id', item.id);
     }
 
-    async function addGoods() {
-      const name = document.getElementById('new-goods-name').value.trim();
-      const stock = parseInt(document.getElementById('new-goods-stock').value) || 0;
-      if (!name) return alert('请填写商品名称');
-      
-      await supabase.from('goods').insert([{ name, stock }]);
-      document.getElementById('new-goods-name').value = '';
-      document.getElementById('new-goods-stock').value = '';
-      fetchGoods();
-    }
+    await supabaseClient.from('records').insert([{
+      name,
+      phone,
+      remark,
+      use_coupon: useCoupon,
+      goods_summary: goodsSummaryArr.join('; ')
+    }]);
 
-    async function deleteGoods(id) {
-      if (confirm('确定要删除该商品吗？')) {
-        await supabase.from('goods').delete().eq('id', id);
-        fetchGoods();
-      }
-    }
+    document.getElementById('username').value = '';
+    document.getElementById('phone').value = '';
+    document.getElementById('remark').value = '';
+    document.getElementById('useCoupon').checked = false;
 
-    async function submitOrder() {
-      const name = document.getElementById('username').value.trim();
-      const phone = document.getElementById('phone').value.trim();
-      const remark = document.getElementById('remark').value.trim();
-      const useCoupon = document.getElementById('useCoupon').checked;
-
-      if (!name || !phone) return alert('请填写姓名和联系方式');
-
-      const selected = goodsList.filter(g => g.selectCount > 0);
-      if (selected.length === 0) return alert('请至少选择一件物品');
-
-      let goodsSummaryArr = [];
-      for (let item of selected) {
-        goodsSummaryArr.push(`${item.name} x${item.selectCount}`);
-        const newStock = item.stock - item.selectCount;
-        await supabase.from('goods').update({ stock: newStock }).eq('id', item.id);
-      }
-
-      await supabase.from('records').insert([{
-        name,
-        phone,
-        remark,
-        use_coupon: useCoupon,
-        goods_summary: goodsSummaryArr.join('; ')
-      }]);
-
-      document.getElementById('username').value = '';
-      document.getElementById('phone').value = '';
-      document.getElementById('remark').value = '';
-      document.getElementById('useCoupon').checked = false;
-
-      alert('提交成功，库存已扣减并同步云端！');
-      initData();
-    }
-
-    function exportCSV() {
-      if (records.length === 0) return alert('暂无申报记录可导出');
-      
-      let csvContent = "\uFEFF姓名,联系方式,选择物品,是否用券,备注,提交时间\n";
-      records.forEach(r => {
-        const timeStr = new Date(r.created_at).toLocaleString();
-        csvContent += `"${r.name}","${r.phone}","${r.goods_summary}","${r.use_coupon ? '是' : '否'}","${r.remark || ''}","${timeStr}"\n`;
-      });
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `云端物品领用申报表_${new Date().toLocaleDateString()}.csv`;
-      link.click();
-    }
-
+    alert('提交成功！');
     initData();
-  </script>
+  }
+
+  function exportCSV() {
+    if (records.length === 0) return alert('暂无申报记录可导出');
+    
+    let csvContent = "\uFEFF姓名,联系方式,选择物品,是否用券,备注,提交时间\n";
+    records.forEach(r => {
+      const timeStr = new Date(r.created_at).toLocaleString();
+      csvContent += `"${r.name}","${r.phone}","${r.goods_summary}","${r.use_coupon ? '是' : '否'}","${r.remark || ''}","${timeStr}"\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `云端领用记录表_${new Date().toLocaleDateString()}.csv`;
+    link.click();
+  }
+
+  // 启动初始化
+  initData();
+</script>
 </body>
 </html>
