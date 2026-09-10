@@ -3,34 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>内部物品领用统计</title>
+  <title>内部物品领用与库存管理系统</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; margin: 0; padding: 15px; }
-    .container { max-width: 500px; margin: 0 auto; }
-    .title { text-align: center; font-size: 20px; font-weight: bold; margin-bottom: 15px; color: #333; }
-    .section { background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .section-title { font-size: 16px; font-weight: bold; margin-bottom: 12px; border-left: 4px solid #07c160; padding-left: 8px; }
-    .goods-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f8; margin: 0; padding: 15px; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    .title { font-size: 20px; font-weight: bold; margin: 0; }
+    .admin-link { font-size: 13px; color: #07c160; cursor: pointer; text-decoration: underline; }
+    .section { background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .section-title { font-size: 15px; font-weight: bold; margin-bottom: 12px; border-left: 4px solid #07c160; padding-left: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .goods-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
     .goods-item:last-child { border-bottom: none; }
     .goods-name { font-size: 15px; font-weight: 500; }
     .goods-stock { font-size: 12px; color: #888; display: block; margin-top: 2px; }
     .stepper { display: flex; align-items: center; }
-    .btn-step { width: 30px; height: 30px; background: #eee; border: none; border-radius: 4px; font-size: 18px; font-weight: bold; cursor: pointer; }
-    .count { width: 36px; text-align: center; font-size: 14px; font-weight: bold; }
-    .input { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 10px; font-size: 14px; }
-    .checkbox-label { font-size: 14px; display: flex; align-items: center; margin-top: 5px; color: #555; }
+    .btn-step { width: 28px; height: 28px; background: #eee; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; }
+    .count { width: 32px; text-align: center; font-size: 14px; font-weight: bold; }
+    .input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 10px; font-size: 14px; }
+    .checkbox-label { font-size: 14px; display: flex; align-items: center; color: #555; }
     .checkbox-label input { margin-right: 8px; }
-    .submit-btn { width: 100%; background: #07c160; color: #fff; border: none; padding: 12px; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
+    .btn-primary { width: 100%; background: #07c160; color: #fff; border: none; padding: 12px; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
+    .btn-secondary { background: #108ee9; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+    .btn-danger { background: #f5222d; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; }
     .record-card { background: #fafafa; border: 1px solid #eee; padding: 10px; border-radius: 6px; margin-bottom: 8px; font-size: 13px; }
     .time { font-size: 11px; color: #999; margin-top: 4px; }
-    .reset-btn { background: #ee0a24; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; margin-top: 10px; cursor: pointer; }
+    .admin-panel { display: none; background: #e6f7ff; border: 1px solid #91d5ff; }
+    .admin-active .admin-panel { display: block; }
+    .admin-goods-row { display: flex; gap: 8px; margin-bottom: 8px; }
+    .admin-goods-row input { margin-bottom: 0; }
   </style>
 </head>
-<body>
+<body id="body">
   <div class="container">
-    <div class="title">内部物品领用统计</div>
+    <div class="header">
+      <h1 class="title">内部物品领用统计</h1>
+      <span class="admin-link" id="admin-btn" onclick="toggleAdmin()">管理员入口</span>
+    </div>
 
-    <!-- 1. 选择物品 -->
+    <!-- 管理员控制面板 -->
+    <div class="section admin-panel">
+      <div class="section-title">
+        <span>⚙️ 管理员控制台</span>
+        <button class="btn-danger" onclick="toggleAdmin()">退出管理</button>
+      </div>
+      
+      <h4>1. 添加/修改商品及库存</h4>
+      <div id="admin-goods-manage"></div>
+      <div class="admin-goods-row" style="margin-top: 10px;">
+        <input type="text" id="new-goods-name" class="input" placeholder="新商品名称">
+        <input type="number" id="new-goods-stock" class="input" placeholder="库存" style="width: 100px;">
+        <button class="btn-secondary" onclick="addGoods()">添加商品</button>
+      </div>
+
+      <h4 style="margin-top: 20px;">2. 数据导出与维护</h4>
+      <button class="btn-secondary" onclick="exportCSV()">📥 导出所有申报记录 (Excel/CSV)</button>
+      <button class="btn-danger" onclick="clearData()" style="margin-left: 10px;">⚠️ 重置所有数据</button>
+    </div>
+
+    <!-- 1. 选择物品（用户界面） -->
     <div class="section">
       <div class="section-title">选择物品</div>
       <div id="goods-list"></div>
@@ -38,7 +69,7 @@
 
     <!-- 2. 填写信息 -->
     <div class="section">
-      <div class="section-title">填写信息</div>
+      <div class="section-title">填写个人信息</div>
       <input type="text" id="username" class="input" placeholder="请输入姓名 *">
       <input type="tel" id="phone" class="input" placeholder="请输入联系方式 *">
       <input type="text" id="remark" class="input" placeholder="备注信息（选填）">
@@ -47,26 +78,50 @@
       </label>
     </div>
 
-    <button class="submit-btn" onclick="submitOrder()">确认提交并扣减库存</button>
+    <button class="btn-primary" onclick="submitOrder()">确认提交并扣减库存</button>
 
     <!-- 3. 统计记录 -->
     <div class="section" style="margin-top: 15px;">
-      <div class="section-title" id="record-title">内部提交记录统计</div>
+      <div class="section-title">
+        <span id="record-title">提交记录统计</span>
+      </div>
       <div id="record-list"></div>
-      <button class="reset-btn" onclick="clearData()">重置/恢复初始库存</button>
     </div>
   </div>
 
   <script>
+    const ADMIN_PASSWORD = "123456"; // 默认管理员密码
+    let isAdmin = false;
+
     const defaultGoods = [
       { id: 1, name: "物品 A", stock: 10, selectCount: 0 },
       { id: 2, name: "物品 B", stock: 5, selectCount: 0 },
       { id: 3, name: "物品 C", stock: 20, selectCount: 0 }
     ];
 
-    let goodsList = JSON.parse(localStorage.getItem('WEB_GOODS')) || defaultGoods;
-    let records = JSON.parse(localStorage.getItem('WEB_RECORDS')) || [];
+    let goodsList = JSON.parse(localStorage.getItem('SYS_GOODS')) || defaultGoods;
+    let records = JSON.parse(localStorage.getItem('SYS_RECORDS')) || [];
 
+    // 管理员切换
+    function toggleAdmin() {
+      if (!isAdmin) {
+        const pwd = prompt("请输入管理员密码：");
+        if (pwd === ADMIN_PASSWORD) {
+          isAdmin = true;
+          document.getElementById('body').classList.add('admin-active');
+          document.getElementById('admin-btn').innerText = "当前模式：管理员";
+          renderAdminGoods();
+        } else if (pwd !== null) {
+          alert("密码错误！");
+        }
+      } else {
+        isAdmin = false;
+        document.getElementById('body').classList.remove('admin-active');
+        document.getElementById('admin-btn').innerText = "管理员入口";
+      }
+    }
+
+    // 渲染页面商品
     function renderGoods() {
       const container = document.getElementById('goods-list');
       container.innerHTML = '';
@@ -79,7 +134,7 @@
             </div>
             <div class="stepper">
               <button class="btn-step" onclick="changeCount(${item.id}, -1)">-</button>
-              <span class="count">${item.selectCount}</span>
+              <span class="count">${item.selectCount || 0}</span>
               <button class="btn-step" onclick="changeCount(${item.id}, 1)">+</button>
             </div>
           </div>
@@ -87,9 +142,25 @@
       });
     }
 
+    // 渲染管理员修改控制列表
+    function renderAdminGoods() {
+      const container = document.getElementById('admin-goods-manage');
+      container.innerHTML = '';
+      goodsList.forEach(item => {
+        container.innerHTML += `
+          <div class="admin-goods-row">
+            <input type="text" class="input" value="${item.name}" onchange="updateGoodsName(${item.id}, this.value)">
+            <input type="number" class="input" style="width: 100px;" value="${item.stock}" onchange="updateGoodsStock(${item.id}, this.value)">
+            <button class="btn-danger" onclick="deleteGoods(${item.id})">删除</button>
+          </div>
+        `;
+      });
+    }
+
+    // 渲染提交记录
     function renderRecords() {
       const container = document.getElementById('record-list');
-      document.getElementById('record-title').innerText = `内部提交记录统计（共 ${records.length} 条）`;
+      document.getElementById('record-title').innerText = `提交记录统计（共 ${records.length} 条）`;
       container.innerHTML = '';
       records.forEach(item => {
         container.innerHTML += `
@@ -107,14 +178,55 @@
     function changeCount(id, delta) {
       const item = goodsList.find(g => g.id === id);
       if (item) {
-        const newCount = item.selectCount + delta;
-        if (newCount < 0) return;
-        if (newCount > item.stock) return alert('已超出剩余库存');
-        item.selectCount = newCount;
+        item.selectCount = (item.selectCount || 0) + delta;
+        if (item.selectCount < 0) item.selectCount = 0;
+        if (item.selectCount > item.stock) {
+          item.selectCount = item.stock;
+          alert('已超出剩余库存');
+        }
         renderGoods();
       }
     }
 
+    // 管理员功能：修改与新增
+    function updateGoodsName(id, name) {
+      const item = goodsList.find(g => g.id === id);
+      if (item) item.name = name;
+      saveGoods();
+    }
+
+    function updateGoodsStock(id, stock) {
+      const item = goodsList.find(g => g.id === id);
+      if (item) item.stock = parseInt(stock) || 0;
+      saveGoods();
+    }
+
+    function addGoods() {
+      const name = document.getElementById('new-goods-name').value.trim();
+      const stock = parseInt(document.getElementById('new-goods-stock').value) || 0;
+      if (!name) return alert('请填写商品名称');
+      
+      goodsList.push({ id: Date.now(), name, stock, selectCount: 0 });
+      document.getElementById('new-goods-name').value = '';
+      document.getElementById('new-goods-stock').value = '';
+      saveGoods();
+      renderAdminGoods();
+    }
+
+    function deleteGoods(id) {
+      if (confirm('确定要删除该商品吗？')) {
+        goodsList = goodsList.filter(g => g.id !== id);
+        saveGoods();
+        renderAdminGoods();
+      }
+    }
+
+    function saveGoods() {
+      localStorage.setItem('SYS_GOODS', JSON.stringify(goodsList));
+      renderGoods();
+    }
+
+    // 提交订单扣减库存
     function submitOrder() {
       const name = document.getElementById('username').value.trim();
       const phone = document.getElementById('phone').value.trim();
@@ -137,33 +249,51 @@
 
       const newRecord = {
         name, phone, remark, useCoupon,
-        goodsSummary: goodsSummaryArr.join(', '),
+        goodsSummary: goodsSummaryArr.join('; '),
         time: new Date().toLocaleString()
       };
 
       records.unshift(newRecord);
 
-      localStorage.setItem('WEB_GOODS', JSON.stringify(goodsList));
-      localStorage.setItem('WEB_RECORDS', JSON.stringify(records));
+      saveGoods();
+      localStorage.setItem('SYS_RECORDS', JSON.stringify(records));
 
       document.getElementById('username').value = '';
       document.getElementById('phone').value = '';
       document.getElementById('remark').value = '';
       document.getElementById('useCoupon').checked = false;
 
-      renderGoods();
       renderRecords();
       alert('提交成功，库存已扣减！');
     }
 
+    // 导出 Excel / CSV 文件
+    function exportCSV() {
+      if (records.length === 0) return alert('暂无申报记录可导出');
+      
+      let csvContent = "\uFEFF姓名,联系方式,选择物品,是否用券,备注,提交时间\n";
+      records.forEach(r => {
+        csvContent += `"${r.name}","${r.phone}","${r.goodsSummary}","${r.useCoupon ? '是' : '否'}","${r.remark || ''}","${r.time}"\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `物品领用申报表_${new Date().toLocaleDateString()}.csv`;
+      link.click();
+    }
+
     function clearData() {
-      localStorage.removeItem('WEB_GOODS');
-      localStorage.removeItem('WEB_RECORDS');
-      goodsList = JSON.parse(JSON.stringify(defaultGoods));
-      records = [];
-      renderGoods();
-      renderRecords();
-      alert('数据已重置');
+      if (confirm('警告：确定要重置并清空所有记录与库存吗？')) {
+        localStorage.removeItem('SYS_GOODS');
+        localStorage.removeItem('SYS_RECORDS');
+        goodsList = JSON.parse(JSON.stringify(defaultGoods));
+        records = [];
+        saveGoods();
+        renderRecords();
+        if (isAdmin) renderAdminGoods();
+        alert('系统已重置');
+      }
     }
 
     renderGoods();
