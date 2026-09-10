@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>内部物品领用与库存管理系统</title>
+  <title>内部物品领用管理系统 (云端同步版)</title>
+  <!-- 引入 Supabase 云数据库 SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f8; margin: 0; padding: 15px; color: #333; }
@@ -58,13 +60,12 @@
 
       <h4 style="margin-top: 20px;">2. 数据导出与维护</h4>
       <button class="btn-secondary" onclick="exportCSV()">📥 导出所有申报记录 (Excel/CSV)</button>
-      <button class="btn-danger" onclick="clearData()" style="margin-left: 10px;">⚠️ 重置所有数据</button>
     </div>
 
     <!-- 1. 选择物品（用户界面） -->
     <div class="section">
       <div class="section-title">选择物品</div>
-      <div id="goods-list"></div>
+      <div id="goods-list">加载中...</div>
     </div>
 
     <!-- 2. 填写信息 -->
@@ -85,24 +86,44 @@
       <div class="section-title">
         <span id="record-title">提交记录统计</span>
       </div>
-      <div id="record-list"></div>
+      <div id="record-list">加载中...</div>
     </div>
   </div>
 
   <script>
-    const ADMIN_PASSWORD = "123456"; // 默认管理员密码
+    // ⚠️ 请在这里替换为您在 Supabase 后台获取的两个值
+    const SUPABASE_URL = "https://kkanrbdewrozxpppphnr.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_OEFaldrTtKB0Z3nJSKNhSw_FvKmpjS0";
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const ADMIN_PASSWORD = "123456";
     let isAdmin = false;
+    let goodsList = [];
+    let records = [];
 
-    const defaultGoods = [
-      { id: 1, name: "物品 A", stock: 10, selectCount: 0 },
-      { id: 2, name: "物品 B", stock: 5, selectCount: 0 },
-      { id: 3, name: "物品 C", stock: 20, selectCount: 0 }
-    ];
+    async function initData() {
+      await fetchGoods();
+      await fetchRecords();
+    }
 
-    let goodsList = JSON.parse(localStorage.getItem('SYS_GOODS')) || defaultGoods;
-    let records = JSON.parse(localStorage.getItem('SYS_RECORDS')) || [];
+    async function fetchGoods() {
+      const { data, error } = await supabase.from('goods').select('*').order('id', { ascending: true });
+      if (!error && data) {
+        goodsList = data.map(item => ({ ...item, selectCount: 0 }));
+        renderGoods();
+        if (isAdmin) renderAdminGoods();
+      }
+    }
 
-    // 管理员切换
+    async function fetchRecords() {
+      const { data, error } = await supabase.from('records').select('*').order('created_at', { ascending: false });
+      if (!error && data) {
+        records = data;
+        renderRecords();
+      }
+    }
+
     function toggleAdmin() {
       if (!isAdmin) {
         const pwd = prompt("请输入管理员密码：");
@@ -121,7 +142,6 @@
       }
     }
 
-    // 渲染页面商品
     function renderGoods() {
       const container = document.getElementById('goods-list');
       container.innerHTML = '';
@@ -142,7 +162,6 @@
       });
     }
 
-    // 渲染管理员修改控制列表
     function renderAdminGoods() {
       const container = document.getElementById('admin-goods-manage');
       container.innerHTML = '';
@@ -157,19 +176,19 @@
       });
     }
 
-    // 渲染提交记录
     function renderRecords() {
       const container = document.getElementById('record-list');
       document.getElementById('record-title').innerText = `提交记录统计（共 ${records.length} 条）`;
       container.innerHTML = '';
       records.forEach(item => {
+        const timeStr = new Date(item.created_at).toLocaleString();
         container.innerHTML += `
           <div class="record-card">
             <div><b>提交人：</b>${item.name} (${item.phone})</div>
-            <div><b>选择物品：</b>${item.goodsSummary}</div>
-            <div><b>是否用券：</b>${item.useCoupon ? '是' : '否'}</div>
+            <div><b>选择物品：</b>${item.goods_summary}</div>
+            <div><b>是否用券：</b>${item.use_coupon ? '是' : '否'}</div>
             ${item.remark ? `<div><b>备注：</b>${item.remark}</div>` : ''}
-            <div class="time">${item.time}</div>
+            <div class="time">${timeStr}</div>
           </div>
         `;
       });
@@ -188,46 +207,35 @@
       }
     }
 
-    // 管理员功能：修改与新增
-    function updateGoodsName(id, name) {
-      const item = goodsList.find(g => g.id === id);
-      if (item) item.name = name;
-      saveGoods();
+    async function updateGoodsName(id, name) {
+      await supabase.from('goods').update({ name }).eq('id', id);
+      fetchGoods();
     }
 
-    function updateGoodsStock(id, stock) {
-      const item = goodsList.find(g => g.id === id);
-      if (item) item.stock = parseInt(stock) || 0;
-      saveGoods();
+    async function updateGoodsStock(id, stock) {
+      await supabase.from('goods').update({ stock: parseInt(stock) || 0 }).eq('id', id);
+      fetchGoods();
     }
 
-    function addGoods() {
+    async function addGoods() {
       const name = document.getElementById('new-goods-name').value.trim();
       const stock = parseInt(document.getElementById('new-goods-stock').value) || 0;
       if (!name) return alert('请填写商品名称');
       
-      goodsList.push({ id: Date.now(), name, stock, selectCount: 0 });
+      await supabase.from('goods').insert([{ name, stock }]);
       document.getElementById('new-goods-name').value = '';
       document.getElementById('new-goods-stock').value = '';
-      saveGoods();
-      renderAdminGoods();
+      fetchGoods();
     }
 
-    function deleteGoods(id) {
+    async function deleteGoods(id) {
       if (confirm('确定要删除该商品吗？')) {
-        goodsList = goodsList.filter(g => g.id !== id);
-        saveGoods();
-        renderAdminGoods();
+        await supabase.from('goods').delete().eq('id', id);
+        fetchGoods();
       }
     }
 
-    function saveGoods() {
-      localStorage.setItem('SYS_GOODS', JSON.stringify(goodsList));
-      renderGoods();
-    }
-
-    // 提交订单扣减库存
-    function submitOrder() {
+    async function submitOrder() {
       const name = document.getElementById('username').value.trim();
       const phone = document.getElementById('phone').value.trim();
       const remark = document.getElementById('remark').value.trim();
@@ -239,65 +247,46 @@
       if (selected.length === 0) return alert('请至少选择一件物品');
 
       let goodsSummaryArr = [];
-      goodsList.forEach(item => {
-        if (item.selectCount > 0) {
-          goodsSummaryArr.push(`${item.name} x${item.selectCount}`);
-          item.stock -= item.selectCount;
-          item.selectCount = 0;
-        }
-      });
+      for (let item of selected) {
+        goodsSummaryArr.push(`${item.name} x${item.selectCount}`);
+        const newStock = item.stock - item.selectCount;
+        await supabase.from('goods').update({ stock: newStock }).eq('id', item.id);
+      }
 
-      const newRecord = {
-        name, phone, remark, useCoupon,
-        goodsSummary: goodsSummaryArr.join('; '),
-        time: new Date().toLocaleString()
-      };
-
-      records.unshift(newRecord);
-
-      saveGoods();
-      localStorage.setItem('SYS_RECORDS', JSON.stringify(records));
+      await supabase.from('records').insert([{
+        name,
+        phone,
+        remark,
+        use_coupon: useCoupon,
+        goods_summary: goodsSummaryArr.join('; ')
+      }]);
 
       document.getElementById('username').value = '';
       document.getElementById('phone').value = '';
       document.getElementById('remark').value = '';
       document.getElementById('useCoupon').checked = false;
 
-      renderRecords();
-      alert('提交成功，库存已扣减！');
+      alert('提交成功，库存已扣减并同步云端！');
+      initData();
     }
 
-    // 导出 Excel / CSV 文件
     function exportCSV() {
       if (records.length === 0) return alert('暂无申报记录可导出');
       
       let csvContent = "\uFEFF姓名,联系方式,选择物品,是否用券,备注,提交时间\n";
       records.forEach(r => {
-        csvContent += `"${r.name}","${r.phone}","${r.goodsSummary}","${r.useCoupon ? '是' : '否'}","${r.remark || ''}","${r.time}"\n`;
+        const timeStr = new Date(r.created_at).toLocaleString();
+        csvContent += `"${r.name}","${r.phone}","${r.goods_summary}","${r.use_coupon ? '是' : '否'}","${r.remark || ''}","${timeStr}"\n`;
       });
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `物品领用申报表_${new Date().toLocaleDateString()}.csv`;
+      link.download = `云端物品领用申报表_${new Date().toLocaleDateString()}.csv`;
       link.click();
     }
 
-    function clearData() {
-      if (confirm('警告：确定要重置并清空所有记录与库存吗？')) {
-        localStorage.removeItem('SYS_GOODS');
-        localStorage.removeItem('SYS_RECORDS');
-        goodsList = JSON.parse(JSON.stringify(defaultGoods));
-        records = [];
-        saveGoods();
-        renderRecords();
-        if (isAdmin) renderAdminGoods();
-        alert('系统已重置');
-      }
-    }
-
-    renderGoods();
-    renderRecords();
+    initData();
   </script>
 </body>
 </html>
