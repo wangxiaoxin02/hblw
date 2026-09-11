@@ -637,21 +637,90 @@ async function submitOrder() {
   if (typeof fetchGlobalStats === 'function') await fetchGlobalStats();
 }
 
-    function exportCSV() {
-      if (records.length === 0) return alert('暂无申报记录可导出');
-      
-      let csvContent = "\uFEFF姓名,联系方式,提货地址,选择物品,是否用券,备注,提交时间\n";
-      records.forEach(r => {
-        const timeStr = new Date(r.created_at).toLocaleString();
-        csvContent += `"${r.name}","${r.phone}","${r.pickup_location || '培训中心'}","${r.goods_summary}","${r.use_coupon ? '是' : '否'}","${r.remark || ''}","${timeStr}"\n`;
+ // 导出 Excel / CSV (按物品拆分列)
+async function exportToExcel() {
+  try {
+    // 1. 获取所有申报记录
+    const { data: records, error: recErr } = await supabaseClient
+      .from('records')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (recErr || !records || records.length === 0) {
+      return alert('暂无数据可导出！');
+    }
+
+    // 2. 获取所有动态商品列表（作为表头）
+    const { data: goods, error: gErr } = await supabaseClient
+      .from('goods')
+      .select('name')
+      .order('id', { ascending: true });
+
+    const goodsNames = goods ? goods.map(g => g.name.trim()) : [];
+
+    // 3. 构建表头 Header
+    // 基础列 + 动态商品列 + 备注等列
+    let headers = ['提交时间', '姓名', '联系电话', '提货地址'];
+    headers = headers.concat(goodsNames); // 动态插入每种商品名称列
+    headers.push('是否用券', '备注信息');
+
+    // 4. 解析每条记录的数据
+    const rows = records.map(r => {
+      // 解析 goods_summary，例如："牛肉半斤 x2; 卤鸭半只 x3" -> { "牛肉半斤": 2, "卤鸭半只": 3 }
+      const itemMap = {};
+      if (r.goods_summary) {
+        const parts = r.goods_summary.split(';');
+        parts.forEach(part => {
+          const item = part.trim().split('x');
+          if (item.length === 2) {
+            const name = item[0].trim();
+            const qty = parseInt(item[1].trim()) || 0;
+            itemMap[name] = qty;
+          }
+        });
+      }
+
+      // 构建一行数据
+      const row = [
+        r.created_at ? new Date(r.created_at).toLocaleString() : '',
+        `"${r.name || ''}"`,
+        `"${r.phone || ''}"`,
+        `"${r.pickup_location || '培训中心'}"`
+      ];
+
+      // 依次填入每个商品的数量，没有选择的填 0
+      goodsNames.forEach(gName => {
+        row.push(itemMap[gName] || 0);
       });
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `云端领用记录表_${new Date().toLocaleDateString()}.csv`;
-      link.click();
-    }
+      row.push(
+        r.use_coupon ? '是' : '否',
+        `"${(r.remark || '').replace(/"/g, '""')}"`
+      );
+
+      return row.join(',');
+    });
+
+    // 5. 组合 CSV 内容并加上 BOM 头防止 Excel 打开乱码
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+
+    // 6. 触发下载
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `内部物品领用明细表_${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+  } catch (err) {
+    console.error('导出失败:', err);
+    alert('导出失败，请检查网络或控制台日志！');
+  }
+}
 
     window.addEventListener('DOMContentLoaded', () => {
       initData();
