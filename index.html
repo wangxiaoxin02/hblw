@@ -580,6 +580,7 @@
   }
 
   // 按商品独立分列导出 Excel / CSV
+  // 按商品独立分列导出 Excel / CSV (稳定防报错版)
   async function exportToExcel() {
     try {
       // 1. 获取所有申报记录
@@ -588,24 +589,44 @@
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (recErr || !records || records.length === 0) {
+      if (recErr) {
+        console.error('获取记录失败:', recErr);
+        return alert('获取数据失败：' + recErr.message);
+      }
+
+      if (!records || records.length === 0) {
         return alert('暂无数据可导出！');
       }
 
-      // 2. 获取所有商品名称作为列表头
-      const { data: goods } = await supabaseClient
-        .from('goods')
-        .select('name')
-        .order('id', { ascending: true });
+      // 2. 动态收集所有出现过的商品名称（去重）
+      let dynamicGoodsSet = new Set();
+      
+      // 先从 goods 表读取
+      const { data: goods } = await supabaseClient.from('goods').select('name');
+      if (goods && goods.length > 0) {
+        goods.forEach(g => { if (g.name) dynamicGoodsSet.add(g.name.trim()); });
+      }
 
-      const goodsNames = goods ? goods.map(g => g.name.trim()) : [];
+      // 再从历史记录的 goods_summary 解析，防止删除了商品导致列缺失
+      records.forEach(r => {
+        if (r.goods_summary) {
+          r.goods_summary.split(';').forEach(part => {
+            const item = part.trim().split('x');
+            if (item.length === 2 && item[0].trim()) {
+              dynamicGoodsSet.add(item[0].trim());
+            }
+          });
+        }
+      });
+
+      const goodsNames = Array.from(dynamicGoodsSet);
 
       // 3. 构建表头
       let headers = ['提交时间', '姓名', '联系电话', '提货地址'];
-      headers = headers.concat(goodsNames); // 动态拓展物品列
+      headers = headers.concat(goodsNames);
       headers.push('是否用券', '备注信息');
 
-      // 4. 构建数据行
+      // 4. 构建每一行数据
       const rows = records.map(r => {
         // 解析 goods_summary
         const itemMap = {};
@@ -621,42 +642,47 @@
           });
         }
 
-        const row = [
-          r.created_at ? new Date(r.created_at).toLocaleString() : '',
-          `"${r.name || ''}"`,
-          `"${r.phone || ''}"`,
-          `"${r.pickup_location || '培训中心'}"`
-        ];
+        // 清理特殊字符，防止打乱 CSV 格式
+        const cleanName = `"${(r.name || '').replace(/"/g, '""')}"`;
+        const cleanPhone = `"${(r.phone || '').replace(/"/g, '""')}"`;
+        const cleanLocation = `"${(r.pickup_location || '培训中心').replace(/"/g, '""')}"`;
+        const cleanRemark = `"${(r.remark || '').replace(/"/g, '""')}"`;
+        const timeStr = r.created_at ? new Date(r.created_at).toLocaleString() : '';
 
-        // 各商品对应数量，未选填 0
+        const row = [timeStr, cleanName, cleanPhone, cleanLocation];
+
+        // 填充每个商品列的数量
         goodsNames.forEach(gName => {
-          row.push(itemMap[gName] || 0);
+          row.push(itemMap[gName] !== undefined ? itemMap[gName] : 0);
         });
 
-        row.push(
-          r.use_coupon ? '是' : '否',
-          `"${(r.remark || '').replace(/"/g, '""')}"`
-        );
+        row.push(r.use_coupon ? '是' : '否', cleanRemark);
 
         return row.join(',');
       });
 
-      // 5. 加入 BOM 头防乱码并导出
+      // 5. 加入 BOM 头防中文乱码并生成文件
       const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       const dateStr = new Date().toISOString().slice(0, 10);
       
-      link.setAttribute('href', url);
-      link.setAttribute('download', `内部物品领用明细表_${dateStr}.csv`);
+      link.href = url;
+      link.download = `内部物品领用明细表_${dateStr}.csv`;
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
+      
+      // 清理 DOM
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 100);
 
     } catch (err) {
-      console.error('导出失败:', err);
-      alert('导出失败，请检查控制台！');
+      console.error('导出过程发生崩溃异常:', err);
+      alert('导出发生错误，请在浏览器开发者工具（F12）查看 Console 日志！');
     }
   }
 </script>
