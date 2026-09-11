@@ -550,78 +550,92 @@
       await fetchAdminAllRecords();
       await fetchGlobalStats();
     }
+async function submitOrder() {
+  // 1. 提交前强制去 Supabase 实时查询一次最新截止时间，防止微信端缓存绕过
+  try {
+    const { data: configData } = await supabaseClient.from('system_config').select('*').eq('key', 'deadline').single();
+    if (configData && configData.value) {
+      const now = new Date();
+      const deadline = new Date(configData.value);
+      if (now > deadline) {
+        alert('提交失败：报名已于 ' + deadline.toLocaleString() + ' 截止！');
+        return; // 强行中断提交
+      }
+    }
+  } catch (e) {
+    console.log("校验截止时间失败", e);
+  }
 
-    async function submitOrder() {
-      if (!isAdmin && checkDeadlineExpired()) return alert('报名已截止，无法提交');
+  // 2. 基础信息校验
+  const name = document.getElementById('username').value.trim();
+  const phone = document.getElementById('phone').value.trim();
+  const remark = document.getElementById('remark') ? document.getElementById('remark').value.trim() : '';
+  const useCoupon = document.getElementById('useCoupon') ? document.getElementById('useCoupon').checked : false;
+  
+  // 提货地址兼容逻辑（防止旧页面找不到元素报错）
+  const pickupEl = document.querySelector('input[name="pickupLocation"]:checked');
+  const pickupLocation = pickupEl ? pickupEl.value : '培训中心';
 
-      const name = document.getElementById('username').value.trim();
-      const phone = document.getElementById('phone').value.trim();
-      const remark = document.getElementById('remark').value.trim();
-      const useCoupon = document.getElementById('useCoupon').checked;
-      
-      // 获取提货地址
-      const pickupLocation = document.querySelector('input[name="pickupLocation"]:checked').value;
+  if (!phone || !name) return alert('请填写手机号和姓名');
 
-      if (!phone || !name) return alert('请填写手机号和姓名');
+  const selected = goodsList.filter(g => g.selectCount > 0);
+  if (selected.length === 0) return alert('请至少选择一件物品');
 
-      const selected = goodsList.filter(g => g.selectCount > 0);
-      if (selected.length === 0) return alert('请至少选择一件物品');
-
-      // 还原旧记录库存
-      if (currentRecordId) {
-        const { data: oldRecord } = await supabaseClient.from('records').select('*').eq('id', currentRecordId).maybeSingle();
-        if (oldRecord && oldRecord.goods_summary) {
-          const oldItems = oldRecord.goods_summary.split(';');
-          for (let str of oldItems) {
-            const parts = str.split('x');
-            if (parts.length === 2) {
-              const gName = parts[0].trim();
-              const oldQty = parseInt(parts[1].trim());
-              const g = goodsList.find(x => x.name.trim() === gName);
-              if (g) {
-                await supabaseClient.from('goods').update({ stock: g.stock + oldQty }).eq('id', g.id);
-                g.stock += oldQty;
-              }
-            }
+  // 3. 修改模式：还原旧记录中的预扣库存
+  if (currentRecordId) {
+    const { data: oldRecord } = await supabaseClient.from('records').select('*').eq('id', currentRecordId).maybeSingle();
+    if (oldRecord && oldRecord.goods_summary) {
+      const oldItems = oldRecord.goods_summary.split(';');
+      for (let str of oldItems) {
+        const parts = str.split('x');
+        if (parts.length === 2) {
+          const gName = parts[0].trim();
+          const oldQty = parseInt(parts[1].trim());
+          const g = goodsList.find(x => x.name.trim() === gName);
+          if (g) {
+            await supabaseClient.from('goods').update({ stock: g.stock + oldQty }).eq('id', g.id);
+            g.stock += oldQty;
           }
         }
       }
-
-      // 扣减新库存
-      let goodsSummaryArr = [];
-      for (let item of selected) {
-        goodsSummaryArr.push(`${item.name} x${item.selectCount}`);
-        const newStock = item.stock - item.selectCount;
-        await supabaseClient.from('goods').update({ stock: newStock }).eq('id', item.id);
-      }
-
-      const orderData = {
-        name,
-        phone,
-        remark,
-        use_coupon: useCoupon,
-        pickup_location: pickupLocation,
-        goods_summary: goodsSummaryArr.join('; ')
-      };
-
-      if (currentRecordId) {
-        await supabaseClient.from('records').update(orderData).eq('id', currentRecordId);
-        alert('修改成功！');
-      } else {
-        await supabaseClient.from('records').insert([orderData]);
-        alert('提交成功！');
-      }
-
-      document.getElementById('username').value = '';
-      document.getElementById('phone').value = '';
-      document.getElementById('remark').value = '';
-      document.getElementById('useCoupon').checked = false;
-      goodsList.forEach(g => g.selectCount = 0);
-      resetToNewMode();
-
-      await fetchGoods();
-      await fetchGlobalStats(); // 实时刷新全局统计
     }
+  }
+
+  // 4. 扣减新库存
+  let goodsSummaryArr = [];
+  for (let item of selected) {
+    goodsSummaryArr.push(`${item.name} x${item.selectCount}`);
+    const newStock = item.stock - item.selectCount;
+    await supabaseClient.from('goods').update({ stock: newStock }).eq('id', item.id);
+  }
+
+  const orderData = {
+    name,
+    phone,
+    remark,
+    use_coupon: useCoupon,
+    pickup_location: pickupLocation,
+    goods_summary: goodsSummaryArr.join('; ')
+  };
+
+  if (currentRecordId) {
+    await supabaseClient.from('records').update(orderData).eq('id', currentRecordId);
+    alert('修改成功！');
+  } else {
+    await supabaseClient.from('records').insert([orderData]);
+    alert('提交成功！');
+  }
+
+  document.getElementById('username').value = '';
+  document.getElementById('phone').value = '';
+  if (document.getElementById('remark')) document.getElementById('remark').value = '';
+  if (document.getElementById('useCoupon')) document.getElementById('useCoupon').checked = false;
+  goodsList.forEach(g => g.selectCount = 0);
+  resetToNewMode();
+
+  await fetchGoods();
+  if (typeof fetchGlobalStats === 'function') await fetchGlobalStats();
+}
 
     function exportCSV() {
       if (records.length === 0) return alert('暂无申报记录可导出');
