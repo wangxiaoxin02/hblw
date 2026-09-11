@@ -21,6 +21,13 @@
     .admin-link { font-size: 13px; color: #07c160; cursor: pointer; text-decoration: underline; padding: 5px; }
     .section { background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
     .section-title { font-size: 15px; font-weight: bold; margin-bottom: 12px; border-left: 4px solid #07c160; padding-left: 8px; display: flex; justify-content: space-between; align-items: center; }
+    
+    /* 统计看板组件样式 */
+    .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 10px; }
+    .dash-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 10px; text-align: center; }
+    .dash-num { font-size: 18px; font-weight: bold; color: #07c160; margin-top: 4px; }
+    .dash-label { font-size: 12px; color: #666; }
+
     .goods-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
     .goods-item:last-child { border-bottom: none; }
     .goods-name { font-size: 15px; font-weight: 500; }
@@ -29,9 +36,16 @@
     .btn-step { width: 28px; height: 28px; background: #eee; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; }
     .count { width: 32px; text-align: center; font-size: 14px; font-weight: bold; }
     .input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 10px; font-size: 14px; }
+    
+    /* 单选框与选项样式 */
+    .radio-group { display: flex; gap: 20px; margin-bottom: 12px; }
+    .radio-label { font-size: 14px; display: flex; align-items: center; cursor: pointer; color: #333; }
+    .radio-label input { margin-right: 6px; }
+
     .checkbox-label { font-size: 14px; display: flex; align-items: center; color: #555; }
     .checkbox-label input { margin-right: 8px; }
     .btn-primary { width: 100%; background: #07c160; color: #fff; border: none; padding: 12px; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
+    .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
     .btn-secondary { background: #108ee9; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; }
     .btn-danger { background: #f5222d; color: #fff; border: none; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; }
     .record-card { background: #fafafa; border: 1px solid #eee; padding: 10px; border-radius: 6px; margin-bottom: 8px; font-size: 13px; position: relative; }
@@ -42,6 +56,7 @@
     .admin-goods-row { display: flex; gap: 8px; margin-bottom: 8px; }
     .admin-goods-row input { margin-bottom: 0; }
     .edit-tip { background: #e6f7ff; border: 1px solid #91d5ff; padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; color: #1890ff; display: flex; justify-content: space-between; align-items: center; }
+    .deadline-banner { background: #fffbe6; border: 1px solid #ffe58f; padding: 8px 12px; border-radius: 6px; font-size: 13px; color: #d46b08; margin-bottom: 12px; display: flex; justify-content: space-between; }
   </style>
 </head>
 <body id="body">
@@ -51,6 +66,12 @@
       <span class="admin-link" id="admin-btn" onclick="toggleAdmin()">管理员入口</span>
     </div>
 
+    <!-- 截止时间提醒横幅 -->
+    <div class="deadline-banner">
+      <span>⏰ 报名截止时间：<b id="deadline-display">加载中...</b></span>
+      <span id="deadline-status" style="font-weight:bold;"></span>
+    </div>
+
     <!-- 管理员控制面板 -->
     <div class="section admin-panel">
       <div class="section-title">
@@ -58,7 +79,13 @@
         <button class="btn-danger" onclick="toggleAdmin()">退出管理</button>
       </div>
       
-      <h4>1. 添加/修改商品及库存</h4>
+      <h4>1. 设置报名截止时间</h4>
+      <div style="display: flex; gap: 8px; margin-bottom: 15px;">
+        <input type="datetime-local" id="admin-deadline-input" class="input" style="margin-bottom:0;">
+        <button class="btn-secondary" style="white-space: nowrap;" onclick="saveDeadline()">保存截止时间</button>
+      </div>
+
+      <h4>2. 添加/修改商品及库存</h4>
       <div id="admin-goods-manage"></div>
       <div class="admin-goods-row" style="margin-top: 10px;">
         <input type="text" id="new-goods-name" class="input" placeholder="新商品名称">
@@ -66,8 +93,20 @@
         <button class="btn-secondary" onclick="addGoods()">添加商品</button>
       </div>
 
-      <h4 style="margin-top: 20px;">2. 数据导出与维护</h4>
+      <h4 style="margin-top: 20px;">3. 数据导出与维护</h4>
       <button class="btn-secondary" onclick="exportCSV()">📥 导出所有申报记录 (Excel/CSV)</button>
+    </div>
+
+    <!-- 实时报名汇总看板 (需求2) -->
+    <div class="section">
+      <div class="section-title">📊 报名汇总统计</div>
+      <div class="dashboard" id="stats-dashboard">
+        <div class="dash-card">
+          <div class="dash-label">已报名人数</div>
+          <div class="dash-num" id="stat-total-people">0 人</div>
+        </div>
+        <!-- 物品统计卡片通过 JS 动态生成 -->
+      </div>
     </div>
 
     <!-- 手机号匹配提示栏 -->
@@ -75,12 +114,24 @@
       <span id="edit-tip-text">已为您识别到历史提交记录，修改后点击下方保存即可。</span>
     </div>
 
-    <!-- 1. 填写信息 -->
+    <!-- 1. 填写个人信息与提货地址 (需求3) -->
     <div class="section">
       <div class="section-title">1. 填写个人信息</div>
       <input type="tel" id="phone" class="input" placeholder="请输入联系电话（自动匹配历史提交）*" oninput="checkPhoneMatch()">
       <input type="text" id="username" class="input" placeholder="请输入姓名 *">
       <input type="text" id="remark" class="input" placeholder="备注信息（选填）">
+      
+      <!-- 提货地址单选组 -->
+      <div style="font-size: 14px; font-weight: bold; margin: 10px 0 6px 0;">提货地址：</div>
+      <div class="radio-group">
+        <label class="radio-label">
+          <input type="radio" name="pickupLocation" value="培训中心" checked> 选项1：培训中心
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="pickupLocation" value="第二办公区"> 选项2：第二办公区
+        </label>
+      </div>
+
       <label class="checkbox-label">
         <input type="checkbox" id="useCoupon"> 是否使用优惠券
       </label>
@@ -108,6 +159,7 @@
     let isAdmin = false;
     let goodsList = [];
     let records = [];
+    let globalDeadline = null; // 截止时间 Date 对象
 
     const SUPABASE_URL = "https://kkanrbdewrozxpppphnr.supabase.co";
     // ⚠️ 替换为你的 Supabase API Key
@@ -116,7 +168,6 @@
     let supabaseClient = null;
     let currentRecordId = null; 
 
-    // 切换管理员模式
     async function toggleAdmin() {
       if (!isAdmin) {
         const pwd = prompt("请输入管理员密码：");
@@ -125,7 +176,7 @@
           document.getElementById('body').classList.add('admin-active');
           document.getElementById('admin-btn').innerText = "当前模式：管理员 (点击退出)";
           renderAdminGoods();
-          await fetchAdminAllRecords(); // 进入管理员模式后才拉取全量数据
+          await fetchAdminAllRecords();
         } else if (pwd !== null) {
           alert("密码错误！");
         }
@@ -146,13 +197,115 @@
     }
 
     async function initData() {
-      if (!initSupabase()) {
-        document.getElementById('goods-list').innerHTML = "<span style='color:red;'>Supabase JS 脚本加载失败，请检查网络</span>";
-        document.getElementById('record-list').innerHTML = "<span style='color:red;'>无法连接数据库</span>";
-        return;
-      }
+      if (!initSupabase()) return;
+      await fetchDeadline();
       await fetchGoods();
-      // 页面首次加载时不获取任何全量 records 数据
+      await fetchGlobalStats(); // 载入报名汇总数据
+    }
+
+    // 获取并检测截止时间
+    async function fetchDeadline() {
+      try {
+        const { data } = await supabaseClient.from('system_config').select('*').eq('key', 'deadline').single();
+        if (data && data.value) {
+          globalDeadline = new Date(data.value);
+          const formatStr = globalDeadline.toLocaleString('zh-CN', { hour12: false });
+          document.getElementById('deadline-display').innerText = formatStr;
+          
+          // 给管理员输入框赋初始值
+          const localISO = new Date(globalDeadline.getTime() - globalDeadline.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+          document.getElementById('admin-deadline-input').value = localISO;
+
+          checkDeadlineExpired();
+        }
+      } catch (e) {
+        document.getElementById('deadline-display').innerText = "未设置";
+      }
+    }
+
+    // 检查时间是否超时
+    function checkDeadlineExpired() {
+      if (!globalDeadline) return false;
+      const isExpired = new Date() > globalDeadline;
+      const statusEl = document.getElementById('deadline-status');
+      const submitBtn = document.getElementById('submit-btn');
+
+      if (isExpired) {
+        statusEl.innerText = "(已截止)";
+        statusEl.style.color = "red";
+        if (!isAdmin) {
+          submitBtn.disabled = true;
+          submitBtn.innerText = "报名已截止（无法提交或修改）";
+        }
+      } else {
+        statusEl.innerText = "(进行中)";
+        statusEl.style.color = "#07c160";
+        submitBtn.disabled = false;
+      }
+      return isExpired;
+    }
+
+    async function saveDeadline() {
+      const val = document.getElementById('admin-deadline-input').value;
+      if (!val) return alert("请选择有效的截止时间");
+      
+      await supabaseClient.from('system_config').upsert({ key: 'deadline', value: val });
+      alert("截止时间保存成功！");
+      fetchDeadline();
+    }
+
+    // 统计总报名人数及各物品领用份数
+    async function fetchGlobalStats() {
+      try {
+        const { data } = await supabaseClient.from('records').select('goods_summary');
+        if (!data) return;
+
+        document.getElementById('stat-total-people').innerText = `${data.length} 人`;
+
+        // 汇总每种商品的领用总量
+        let goodsCounts = {};
+        goodsList.forEach(g => goodsCounts[g.name] = 0);
+
+        data.forEach(r => {
+          if (r.goods_summary) {
+            const items = r.goods_summary.split(';');
+            items.forEach(str => {
+              const parts = str.split('x');
+              if (parts.length === 2) {
+                const gName = parts[0].trim();
+                const count = parseInt(parts[1].trim()) || 0;
+                if (goodsCounts[gName] !== undefined) {
+                  goodsCounts[gName] += count;
+                } else {
+                  goodsCounts[gName] = count;
+                }
+              }
+            });
+          }
+        });
+
+        // 渲染统计卡片
+        const dashContainer = document.getElementById('stats-dashboard');
+        // 保留第一个“总人数”卡片
+        dashContainer.innerHTML = `
+          <div class="dash-card">
+            <div class="dash-label">已报名总人数</div>
+            <div class="dash-num">${data.length} 人</div>
+          </div>
+        `;
+        
+        Object.keys(goodsCounts).forEach(gName => {
+          dashContainer.innerHTML += `
+            <div class="dash-card">
+              <div class="dash-label">${gName} 领用</div>
+              <div class="dash-num">${goodsCounts[gName]} 份</div>
+            </div>
+          `;
+        });
+
+      } catch (e) {
+        console.error("加载统计失败", e);
+      }
     }
 
     async function fetchGoods() {
@@ -172,7 +325,6 @@
       }
     }
 
-    // 管理员拉取全量记录
     async function fetchAdminAllRecords() {
       try {
         const { data, error } = await supabaseClient.from('records').select('*').order('created_at', { ascending: false });
@@ -184,17 +336,14 @@
       }
     }
 
-    // 实时查询个人手机号对应的历史提交记录（普通模式）
     let searchTimer = null;
     function checkPhoneMatch() {
       clearTimeout(searchTimer);
       searchTimer = setTimeout(async () => {
         const phone = document.getElementById('phone').value.trim();
-        
-        // 如果是在管理员模式下，不触发个人匹配
         if (isAdmin) return;
 
-        if (phone.length >= 11) {
+        if (phone.length > 0) {
           const { data } = await supabaseClient
             .from('records')
             .select('*')
@@ -202,7 +351,7 @@
             .order('created_at', { ascending: false });
 
           if (data && data.length > 0) {
-            records = data; // 仅存入该手机号的数据
+            records = data;
             const lastRecord = data[0];
             currentRecordId = lastRecord.id;
             
@@ -212,6 +361,11 @@
             document.getElementById('username').value = lastRecord.name || '';
             document.getElementById('remark').value = lastRecord.remark || '';
             document.getElementById('useCoupon').checked = !!lastRecord.use_coupon;
+
+            // 回显提货地址
+            const pickupVal = lastRecord.pickup_location || '培训中心';
+            const radioEl = document.querySelector(`input[name="pickupLocation"][value="${pickupVal}"]`);
+            if (radioEl) radioEl.checked = true;
 
             goodsList.forEach(g => g.selectCount = 0);
 
@@ -229,12 +383,13 @@
             }
             renderGoods();
             renderRecords();
+            checkDeadlineExpired(); // 重新校验按钮状态
             return;
           }
         }
         
         resetToNewMode();
-      }, 400);
+      }, 300);
     }
 
     function resetToNewMode() {
@@ -248,6 +403,7 @@
         records = [];
         renderRecords();
       }
+      checkDeadlineExpired();
     }
 
     function renderGoods() {
@@ -313,6 +469,7 @@
               <div><b>提交人：</b>${item.name} (${item.phone}) ${isEditing ? '<span style="color:#1890ff;font-weight:bold;">(当前编辑中)</span>' : ''}</div>
               ${isAdmin ? `<button class="btn-danger" onclick="deleteRecord(${item.id})">删除记录</button>` : ''}
             </div>
+            <div><b>提货地址：</b><span style="color:#108ee9;font-weight:bold;">${item.pickup_location || '培训中心'}</span></div>
             <div><b>选择物品：</b>${item.goods_summary}</div>
             <div><b>是否用券：</b>${item.use_coupon ? '是' : '否'}</div>
             ${item.remark ? `<div><b>备注：</b>${item.remark}</div>` : ''}
@@ -323,6 +480,7 @@
     }
 
     function changeCount(id, delta) {
+      if (!isAdmin && checkDeadlineExpired()) return alert("报名已截止，无法操作");
       const item = goodsList.find(g => g.id === id);
       if (item) {
         item.selectCount = (item.selectCount || 0) + delta;
@@ -353,17 +511,18 @@
       await supabaseClient.from('goods').insert([{ name, stock }]);
       document.getElementById('new-goods-name').value = '';
       document.getElementById('new-goods-stock').value = '';
-      fetchGoods();
+      await fetchGoods();
+      await fetchGlobalStats();
     }
 
     async function deleteGoods(id) {
       if (confirm('确定要删除该商品吗？')) {
         await supabaseClient.from('goods').delete().eq('id', id);
-        fetchGoods();
+        await fetchGoods();
+        await fetchGlobalStats();
       }
     }
 
-    // 管理员删除记录并返还相应库存
     async function deleteRecord(recordId) {
       if (!confirm('确定要删除这条提交记录吗？删除后会还原对应扣减的商品库存！')) return;
 
@@ -389,20 +548,26 @@
       
       await fetchGoods();
       await fetchAdminAllRecords();
+      await fetchGlobalStats();
     }
 
     async function submitOrder() {
+      if (!isAdmin && checkDeadlineExpired()) return alert('报名已截止，无法提交');
+
       const name = document.getElementById('username').value.trim();
       const phone = document.getElementById('phone').value.trim();
       const remark = document.getElementById('remark').value.trim();
       const useCoupon = document.getElementById('useCoupon').checked;
+      
+      // 获取提货地址
+      const pickupLocation = document.querySelector('input[name="pickupLocation"]:checked').value;
 
       if (!phone || !name) return alert('请填写手机号和姓名');
 
       const selected = goodsList.filter(g => g.selectCount > 0);
       if (selected.length === 0) return alert('请至少选择一件物品');
 
-      // 修改模式：还原旧记录中的原预扣库存
+      // 还原旧记录库存
       if (currentRecordId) {
         const { data: oldRecord } = await supabaseClient.from('records').select('*').eq('id', currentRecordId).maybeSingle();
         if (oldRecord && oldRecord.goods_summary) {
@@ -422,7 +587,7 @@
         }
       }
 
-      // 扣减新选择的库存
+      // 扣减新库存
       let goodsSummaryArr = [];
       for (let item of selected) {
         goodsSummaryArr.push(`${item.name} x${item.selectCount}`);
@@ -435,6 +600,7 @@
         phone,
         remark,
         use_coupon: useCoupon,
+        pickup_location: pickupLocation,
         goods_summary: goodsSummaryArr.join('; ')
       };
 
@@ -454,15 +620,16 @@
       resetToNewMode();
 
       await fetchGoods();
+      await fetchGlobalStats(); // 实时刷新全局统计
     }
 
     function exportCSV() {
       if (records.length === 0) return alert('暂无申报记录可导出');
       
-      let csvContent = "\uFEFF姓名,联系方式,选择物品,是否用券,备注,提交时间\n";
+      let csvContent = "\uFEFF姓名,联系方式,提货地址,选择物品,是否用券,备注,提交时间\n";
       records.forEach(r => {
         const timeStr = new Date(r.created_at).toLocaleString();
-        csvContent += `"${r.name}","${r.phone}","${r.goods_summary}","${r.use_coupon ? '是' : '否'}","${r.remark || ''}","${timeStr}"\n`;
+        csvContent += `"${r.name}","${r.phone}","${r.pickup_location || '培训中心'}","${r.goods_summary}","${r.use_coupon ? '是' : '否'}","${r.remark || ''}","${timeStr}"\n`;
       });
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
