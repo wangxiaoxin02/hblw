@@ -95,7 +95,10 @@
     </div>
 
     <h4>3. 数据导出与维护</h4>
-    <button class="btn-admin" style="width:100%; background:#028259;" onclick="exportToExcel()">📥 导出所有申报记录 (Excel/CSV)</button>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+      <button class="btn-admin" style="flex: 1; background:#028259;" onclick="exportToExcel()">📥 导出申报记录 (Excel/CSV)</button>
+      <button class="btn-admin btn-danger" style="flex: 1;" onclick="clearAllRecords()">🗑️ 清空所有申报记录</button>
+    </div>
   </div>
 
   <!-- 报名汇总看板 -->
@@ -154,7 +157,7 @@
 
   let goodsList = [];
   let isAdmin = false;
-  let currentRecordId = null; // 为空表示新增，有值表示正在修改旧记录
+  let currentRecordId = null; 
   let globalDeadline = null;
 
   // 初始化页面
@@ -172,7 +175,6 @@
         globalDeadline = new Date(data.value);
         document.getElementById('deadline-text').innerText = globalDeadline.toLocaleString();
         
-        // 设置管理员控制台回显
         const localISO = new Date(globalDeadline.getTime() - (globalDeadline.getTimezoneOffset() * 60000)).toISOString().slice(0,16);
         document.getElementById('deadline-input').value = localISO;
       } else {
@@ -205,7 +207,7 @@
     return isExpired;
   }
 
-  // 保存截止时间（管理员）
+  // 保存截止时间
   async function saveDeadline() {
     const val = document.getElementById('deadline-input').value;
     if (!val) return alert("请选择有效时间");
@@ -225,7 +227,6 @@
     const { data, error } = await supabaseClient.from('goods').select('*').order('id', { ascending: true });
     if (error) return console.error(error);
     
-    // 保持已有选择数量
     goodsList = (data || []).map(item => {
       const old = goodsList.find(g => g.id === item.id);
       return { ...item, selectCount: old ? old.selectCount : 0 };
@@ -235,7 +236,7 @@
     if (isAdmin) renderAdminGoods();
   }
 
-  // 渲染用户端商品列表
+  // 渲染商品列表
   function renderGoods() {
     const container = document.getElementById('goods-container');
     container.innerHTML = '';
@@ -258,7 +259,7 @@
     });
   }
 
-  // 改变商品选择数量
+  // 改变商品数量
   function changeCount(id, delta) {
     if (checkDeadlineExpired()) {
       return alert('报名已截止，无法选择');
@@ -275,9 +276,8 @@
     renderGoods();
   }
 
-  // 提交/修改数据 (包含数据库实时校验强拦截)
+  // 提交订单
   async function submitOrder() {
-    // 1. 提交时刻强效拦截：去数据库实时查询截止时间，防止微信浏览器缓存绕过
     try {
       const { data: configData } = await supabaseClient.from('system_config').select('*').eq('key', 'deadline').single();
       if (configData && configData.value) {
@@ -286,7 +286,7 @@
         if (now > deadline) {
           alert('提交失败：报名已于 ' + deadline.toLocaleString() + ' 截止！');
           checkDeadlineExpired();
-          return; // 强制中断
+          return;
         }
       }
     } catch (e) {
@@ -298,7 +298,6 @@
     const remark = document.getElementById('remark').value.trim();
     const useCoupon = document.getElementById('useCoupon').checked;
     
-    // 提货地址
     const pickupEl = document.querySelector('input[name="pickupLocation"]:checked');
     const pickupLocation = pickupEl ? pickupEl.value : '培训中心';
 
@@ -307,7 +306,6 @@
     const selected = goodsList.filter(g => g.selectCount > 0);
     if (selected.length === 0) return alert('请至少选择一件物品');
 
-    // 如果处于修改旧记录模式，需要把旧记录扣掉的库存加还给系统
     if (currentRecordId) {
       const { data: oldRecord } = await supabaseClient.from('records').select('*').eq('id', currentRecordId).maybeSingle();
       if (oldRecord && oldRecord.goods_summary) {
@@ -327,7 +325,6 @@
       }
     }
 
-    // 扣减新库存
     let goodsSummaryArr = [];
     for (let item of selected) {
       goodsSummaryArr.push(`${item.name} x${item.selectCount}`);
@@ -352,7 +349,6 @@
       alert('提交成功！');
     }
 
-    // 清空重置表单
     document.getElementById('username').value = '';
     document.getElementById('phone').value = '';
     document.getElementById('remark').value = '';
@@ -365,13 +361,13 @@
     handlePhoneBlur();
   }
 
-  // 手机号失焦后自动查询记录
+  // 手机号失焦查记录
   async function handlePhoneBlur() {
     const phone = document.getElementById('phone').value.trim();
     if (!phone) return;
 
     if (isAdmin) {
-      fetchRecords(); // 管理员查看全部
+      fetchRecords();
       return;
     }
 
@@ -384,13 +380,12 @@
     if (error) return console.error(error);
     renderRecords(data || []);
 
-    // 若有历史数据且当前不是修改模式，自动填充姓名
     if (data && data.length > 0 && !currentRecordId) {
       document.getElementById('username').value = data[0].name || '';
     }
   }
 
-  // 渲染记录列表
+  // 渲染记录
   function renderRecords(records) {
     const container = document.getElementById('records-container');
     container.innerHTML = '';
@@ -430,13 +425,11 @@
     document.getElementById('remark').value = record.remark || '';
     document.getElementById('useCoupon').checked = record.use_coupon || false;
 
-    // 单选框回显
     const radios = document.getElementsByName('pickupLocation');
     for (let r of radios) {
       if (r.value === record.pickup_location) r.checked = true;
     }
 
-    // 回显商品选择数量
     goodsList.forEach(g => g.selectCount = 0);
     if (record.goods_summary) {
       const items = record.goods_summary.split(';');
@@ -465,7 +458,7 @@
     btn.style.backgroundColor = "#07c160";
   }
 
-  // 全局数据汇总看板
+  // 汇总看板
   async function fetchGlobalStats() {
     const { data: records } = await supabaseClient.from('records').select('*');
     const container = document.getElementById('stat-grid-box');
@@ -513,7 +506,7 @@
   function toggleAdminMode() {
     if (!isAdmin) {
       const pwd = prompt("请输入管理员密码：");
-      if (pwd === "123456") { // 密码默认为 123456
+      if (pwd === "123456") {
         isAdmin = true;
         document.getElementById('admin-panel').style.display = 'block';
         document.getElementById('admin-toggle-btn').innerText = "当前模式：管理员(点击退出)";
@@ -579,35 +572,45 @@
     await fetchGlobalStats();
   }
 
-  // 按商品独立分列导出 Excel / CSV
-  // 按商品独立分列导出 Excel / CSV (稳定防报错版)
+  // 新增：一键清空所有申报记录（包含二次确认机制）
+  async function clearAllRecords() {
+    const input = prompt("警告：此操作将永久清空所有人的申报记录！\n若确定要清空，请在下方输入大写字母 CLEAR：");
+    if (input === 'CLEAR') {
+      try {
+        // 删除 id 大于 0 的所有数据
+        const { error } = await supabaseClient.from('records').delete().gt('id', 0);
+        if (error) {
+          alert('清空失败：' + error.message);
+        } else {
+          alert('所有申报记录已成功清空！');
+          await fetchRecords();
+          await fetchGlobalStats();
+        }
+      } catch (err) {
+        alert('操作失败：' + err.message);
+      }
+    } else if (input !== null) {
+      alert('输入验证不正确，已取消清空操作。');
+    }
+  }
+
+  // 稳定防报错导出 Excel / CSV
   async function exportToExcel() {
     try {
-      // 1. 获取所有申报记录
       const { data: records, error: recErr } = await supabaseClient
         .from('records')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (recErr) {
-        console.error('获取记录失败:', recErr);
-        return alert('获取数据失败：' + recErr.message);
-      }
+      if (recErr) return alert('获取数据失败：' + recErr.message);
+      if (!records || records.length === 0) return alert('暂无数据可导出！');
 
-      if (!records || records.length === 0) {
-        return alert('暂无数据可导出！');
-      }
-
-      // 2. 动态收集所有出现过的商品名称（去重）
       let dynamicGoodsSet = new Set();
-      
-      // 先从 goods 表读取
       const { data: goods } = await supabaseClient.from('goods').select('name');
       if (goods && goods.length > 0) {
         goods.forEach(g => { if (g.name) dynamicGoodsSet.add(g.name.trim()); });
       }
 
-      // 再从历史记录的 goods_summary 解析，防止删除了商品导致列缺失
       records.forEach(r => {
         if (r.goods_summary) {
           r.goods_summary.split(';').forEach(part => {
@@ -621,14 +624,11 @@
 
       const goodsNames = Array.from(dynamicGoodsSet);
 
-      // 3. 构建表头
       let headers = ['提交时间', '姓名', '联系电话', '提货地址'];
       headers = headers.concat(goodsNames);
       headers.push('是否用券', '备注信息');
 
-      // 4. 构建每一行数据
       const rows = records.map(r => {
-        // 解析 goods_summary
         const itemMap = {};
         if (r.goods_summary) {
           const parts = r.goods_summary.split(';');
@@ -642,7 +642,6 @@
           });
         }
 
-        // 清理特殊字符，防止打乱 CSV 格式
         const cleanName = `"${(r.name || '').replace(/"/g, '""')}"`;
         const cleanPhone = `"${(r.phone || '').replace(/"/g, '""')}"`;
         const cleanLocation = `"${(r.pickup_location || '培训中心').replace(/"/g, '""')}"`;
@@ -651,7 +650,6 @@
 
         const row = [timeStr, cleanName, cleanPhone, cleanLocation];
 
-        // 填充每个商品列的数量
         goodsNames.forEach(gName => {
           row.push(itemMap[gName] !== undefined ? itemMap[gName] : 0);
         });
@@ -661,7 +659,6 @@
         return row.join(',');
       });
 
-      // 5. 加入 BOM 头防中文乱码并生成文件
       const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       
@@ -674,15 +671,14 @@
       document.body.appendChild(link);
       link.click();
       
-      // 清理 DOM
       setTimeout(() => {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
       }, 100);
 
     } catch (err) {
-      console.error('导出过程发生崩溃异常:', err);
-      alert('导出发生错误，请在浏览器开发者工具（F12）查看 Console 日志！');
+      console.error('导出崩溃异常:', err);
+      alert('导出发生错误！');
     }
   }
 </script>
